@@ -17,7 +17,8 @@ const Radar = {
     raStartTime: 0,
     lastVsOkTime: null,
     lastIncreaseTime: 0,
-    increaseCount: 0
+    increaseCount: 0,
+    lastClearTime: 0 // НОВОЕ: Время, когда последний раз звучал Clear
   },
 
   OWN_PLANE_Y_RATIO: 0.60,
@@ -161,17 +162,15 @@ const Radar = {
       );
       if (distFromCenter > maxVisualDistancePx) return;
 
-      // 1. Стандартный расчет статуса
+      // 1. Стандартный расчет (вертикаль и физика сохраняются)
       let status = enemy.checkThreat(ownPlane);
 
-      // 2. ОТСЕЧКА "ПРОЛЕТЕЛИ МИМО" (Strict Passing Check)
-      // Если это встречный самолет (летит влево) и его координата X меньше нашей
-      // (то есть он физически остался за спиной или на одной линии),
-      // мы принудительно снимаем с него статус угрозы.
-      // Это убирает полосы вариометра ровно в момент пролета.
+      // 2. ГОРИЗОНТАЛЬНЫЙ СРЕЗ (Horizontal Cutoff)
+      // Если враг летел навстречу (vectorX < 0) и его координата X стала меньше нашей (мы его перегнали),
+      // то мгновенно убираем угрозу. 
       if (enemy.vectorX < 0 && enemy.x < ownPlane.x) {
          status = 0;
-         enemy.isRaActive = false; // Снимаем "залипание" (sticky RA)
+         enemy.isRaActive = false; // Снимаем "залипание"
       }
 
       if (forceStatus !== null) {
@@ -278,6 +277,7 @@ const Radar = {
     // --- ЛОГИКА АУДИО ---
 
     // 1. CLEAR OF CONFLICT
+    // Срабатывает, когда мы перегнали цель (RA исчез).
     if (this.threatState.hasRA && !newHasRA) {
         audio.play('clear');
         this.threatState.raPhase = 'none';
@@ -286,18 +286,30 @@ const Radar = {
         this.threatState.lastIncreaseTime = 0;
         this.threatState.increaseCount = 0;
         
-        this.threatState.hasRA = false; 
+        this.threatState.hasRA = false;
         
-        // ВАЖНОЕ ИЗМЕНЕНИЕ:
-        // Мы НЕ сбрасываем hasTraffic здесь.
-        // Если RA пропал (Clear), но вокруг все еще есть другой борт (TA),
-        // система должна считать, что она УЖЕ предупреждала о трафике.
-        // Это предотвращает мгновенное срабатывание "Traffic" сразу после "Clear".
+        // ВАЖНО: Сбрасываем флаг Traffic в false, чтобы система снова могла проверить условия для Traffic.
+        // Но сам звук Traffic будет заблокирован таймером ниже.
+        this.threatState.hasTraffic = false; 
+
+        // Запоминаем время, когда закончился конфликт
+        this.threatState.lastClearTime = now;
     }
 
-    // 2. TRAFFIC ALERT
+    // 2. TRAFFIC ALERT (с задержкой)
+    // Мы хотим сказать Traffic, если есть угроза, нет RA, и мы еще не сказали Traffic.
     if (newHasTraffic && !this.threatState.hasTraffic && !newHasRA) {
-      audio.play('traffic');
+        // Проверяем, сколько прошло времени с момента Clear
+        const timeSinceClear = now - this.threatState.lastClearTime;
+        
+        // Если прошло больше 2500 мс (2.5 сек), разрешаем воспроизведение
+        if (timeSinceClear > 2500) {
+            audio.play('traffic');
+            // Ставим флаг только ПОСЛЕ воспроизведения
+            this.threatState.hasTraffic = true;
+        }
+        // Если время еще не прошло — мы просто ничего не делаем в этом кадре.
+        // В следующем кадре условие newHasTraffic всё еще будет true, и мы снова проверим таймер.
     }
 
     // 3. НОВЫЙ RA или ИЗМЕНЕНИЕ ADVISORY
@@ -352,9 +364,13 @@ const Radar = {
     }
 
     // Сохранение состояния
-    this.threatState.hasTraffic = newHasTraffic;
+    // Обратите внимание: hasTraffic сохраняем внутри блока 2, чтобы учесть задержку
     this.threatState.hasRA = newHasRA;
     this.threatState.advisory = advisory;
+    // hasTraffic обновляется индивидуально внутри логики с таймером
+    if (!newHasTraffic) {
+       this.threatState.hasTraffic = false;
+    }
   },
 
   drawBlip(ctx, x, y, status, enemy, ownPlane, scaleFactor) {
