@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="ru">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>TCAS</title>
+    <link rel="stylesheet" href="style.css"> <!-- ВОТ ЭТА СТРОКА -->
+    <link rel="icon" type="image/x-icon" href="img/logo.ico">
+    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+    <style>
+      body { background-color: #000000; overflow: hidden; margin: 0; }
+      .noselect { user-select: none; -webkit-user-select: none; }
+      
+      .interactive-btn { 
+          cursor: pointer; 
+          -webkit-tap-highlight-color: transparent; 
+          transition: transform 0.05s;
+      }
+      .interactive-btn:active { transform: scale(0.98); }
+
+      .sky-plane {
+        position: absolute;
+        will-change: transform;
+        pointer-events: none;
+      }
+      
+      .vs-text {
+          font-family: "Consolas", "Monaco", monospace;
+          font-weight: 600;
+          text-shadow: 0px 0px 2px rgba(0, 0, 0, 0.8);
+      }
+    </style>
+  </head>
+  <body class="noselect">
+    <main class="w-full h-screen flex flex-col bg-black">
+      
+      <div id="sky-container" class="flex-1 w-full relative overflow-hidden bg-black z-0 border-b border-gray-800/50"></div>
+
+      <div class="w-full h-[450px] flex items-end bg-black relative z-50 px-4 pb-2 overflow-hidden">
+        
+        <div class="relative w-[500px] h-[420px] shrink-0 mr-4">
+            <img id="radar-bg" src="img/radar20.png" class="absolute top-0 left-0 w-full h-full object-fill opacity-90" />
+            <canvas id="radarScreen" width="500" height="420" class="absolute top-0 left-0 w-full h-full z-10"></canvas>
+        </div>
+
+        <div class="relative w-[120px] h-[130px] shrink-0 flex justify-center items-center mr-2 mb-6">
+            <img src="img/range-base.png" class="w-full h-full object-contain absolute" />
+            <img
+                src="img/range-base-ticket.png"
+                id="range-knob" 
+                class="w-[65px] h-[65px] absolute cursor-pointer transition-transform duration-200"
+                style="top: 45px; left: 47.5%; transform: translateX(-50%) rotate(-85deg);" 
+            />
+        </div>
+
+        <div class="relative w-[560px] h-[250px] shrink-0 mr-4 mb-4">
+            <img src="img/central-panel.png" class="w-full h-full object-contain absolute top-0 left-0 z-0" />
+            
+            <!-- ATC Button -->
+            <div class="absolute top-[65%] left-[45%] w-[45px] h-[45px] z-20">
+                <img src="img/atc-ident-off.png" id="btn-atc" class="w-full h-full object-contain interactive-btn" />
+            </div>
+
+            <!-- Mode Knob -->
+            <div class="absolute top-[10%] left-[10%] w-[80px] h-[80px] z-20">
+                <img src="img/knob-mode.png" id="knob-mode" class="w-full h-full object-contain interactive-btn transition-transform duration-200" />
+            </div>
+
+            <!-- Transponder Display -->
+            <!-- <div class="absolute top-[18%] left-[53%] -translate-x-1/2 z-10">
+                <span id="xpdr-display" class="font-mono text-orange-500 text-4xl font-bold tracking-widest drop-shadow-md select-none">1200</span>
+            </div> -->
+
+                        <!-- Transponder Display -->
+            <div class="absolute top-[23%] left-[52%] -translate-x-1/2 z-10">
+                <span 
+                id="xpdr-display" 
+                class="digital-font text-orange-500 text-4xl font-bold tracking-widest drop-shadow-md select-none"
+            >
+                1200
+            </span>
+
+            </div>
+
+
+
+
+
+            <!-- Left Knob Set (Thousands/Hundreds) -->
+            <div class="absolute top-[45%] left-[25%] w-[85px] h-[85px] z-20 flex justify-center items-center">
+                <!-- Outer: Hundreds -->
+                <img src="img/left-outer.png" id="knob-left-outer" class="absolute w-full h-full object-contain interactive-btn z-10" draggable="false" />
+                <!-- Inner: Thousands -->
+                <img src="img/left-inner.png" id="knob-left-inner" class="absolute w-[65%] h-[65%] object-contain interactive-btn z-20" draggable="false" />
+            </div>
+
+            <!-- Right Knob Set (Tens/Units) -->
+            <div class="absolute top-[45%] left-[58%] w-[85px] h-[85px] z-20 flex justify-center items-center">
+                <!-- Outer: Units -->
+                <img src="img/right-outer.png" id="knob-right-outer" class="absolute w-full h-full object-contain interactive-btn z-10" draggable="false" />
+                <!-- Inner: Tens -->
+                <img src="img/right-inner.png" id="knob-right-inner" class="absolute w-[65%] h-[65%] object-contain interactive-btn z-20" draggable="false" />
+            </div>
+
+        </div>
+
+        <div class="flex gap-4 items-end h-full pb-6 ml-auto pr-4">
+          
+          <div class="flex flex-col items-center relative w-[300px] h-[340px]">
+             <img src="img/own-plane-right.png" class="w-[120px] object-contain absolute -top-[50px] z-20 opacity-90" />
+             <img src="img/right-panel.png" class="w-full h-full absolute top-0 left-0 z-0 object-fill" />
+             
+             <div class="absolute top-[30px] w-full text-center z-20 flex flex-col items-center">
+                 <div class="text-orange-500 flex items-baseline gap-1">
+                    <span id="vs-text-own" class="vs-text text-3xl">0</span>
+                    <span class="vs-text text-base opacity-80">FT/MIN</span>
+                 </div>
+             </div>
+
+             <div class="relative z-10 flex flex-col items-center justify-end gap-0 mb-4 h-full w-full pb-0">
+                <img src="img/vs-plus-off.png" id="btn-own-up" class="vs-btn w-[200px] h-[110px] interactive-btn object-contain" draggable="false" data-target="own" data-dir="up" />
+                <img src="img/vs-minus-off.png" id="btn-own-down" class="vs-btn w-[200px] h-[110px] interactive-btn object-contain" draggable="false" data-target="own" data-dir="down" />
+             </div>
+          </div>
+
+          <div class="flex flex-col items-center relative w-[300px] h-[340px]">
+             <img src="img/control-plane-right.png" class="w-[120px] object-contain absolute -top-[50px] z-20 opacity-90" />
+             <img src="img/right-panel.png" class="w-full h-full absolute top-0 left-0 z-0 object-fill" />
+             
+             <div class="absolute top-[30px] w-full text-center z-20 flex flex-col items-center">
+                 <div class="text-orange-500 flex items-baseline gap-1">
+                    <span id="vs-text-enemy" class="vs-text text-3xl">0</span>
+                    <span class="vs-text text-base opacity-80">FT/MIN</span>
+                 </div>
+             </div>
+
+             <div class="relative z-10 flex flex-col items-center justify-end gap-0 mb-4 h-full w-full pb-0">
+                <img src="img/vs-plus-off.png" id="btn-enemy-up" class="vs-btn w-[200px] h-[110px] interactive-btn object-contain" draggable="false" data-target="enemy" data-dir="up" />
+                <img src="img/vs-minus-off.png" id="btn-enemy-down" class="vs-btn w-[200px] h-[110px] interactive-btn object-contain" draggable="false" data-target="enemy" data-dir="down" />
+             </div>
+          </div>
+
+        </div>
+      </div>
+    </main>
+
+    <div class="hidden">
+        <audio id="tcas-traffic"           src="audio/PMDG_TCAS_traffic.wav"></audio>
+        <audio id="tcas-climb"             src="audio/PMDG_TCAS_climb.wav"></audio>
+        <audio id="tcas-descend"           src="audio/PMDG_TCAS_descend.wav"></audio>
+        <audio id="tcas-clear"             src="audio/PMDG_TCAS_clrconf.wav"></audio>
+        <audio id="tcas-testok"           src="audio/PMDG_TCAS_testok.wav"></audio>
+
+        <!-- новые / уточнённые -->
+        <audio id="tcas-maintain"          src="audio/PMDG_TCAS_maintain.wav"></audio>
+        <audio id="tcas-increase_climb"    src="audio/PMDG_TCAS_increase_climb.wav"></audio>
+        <audio id="tcas-increase_descent"  src="audio/PMDG_TCAS_increase_descent.wav"></audio>
+
+    </div>
+
+    <script src="js/config.js"></script>
+    <script src="js/plane.js"></script>
+    <script src="js/radar.js"></script>
+    <script src="js/controls.js"></script>
+    <script src="js/main.js"></script>
+  </body>
+</html>

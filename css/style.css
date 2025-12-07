@@ -1,0 +1,46 @@
+body {
+    background-color: black;
+    overflow: hidden;
+    margin: 0;
+    user-select: none;
+}
+
+.instrument-btn {
+    cursor: pointer;
+    transition: transform 0.1s ease;
+    -webkit-tap-highlight-color: transparent;
+}
+.instrument-btn:active {
+    transform: scale(0.95);
+}
+
+/* === VS BUTTONS ADJUSTED === */
+.vs-btn {
+    width: 100px; /* Smaller size (was 120) */
+    height: auto;
+    margin: 0 30px; /* Bigger spacing (was 20) */
+    cursor: pointer;
+    transition: transform 0.1s ease;
+    -webkit-tap-highlight-color: transparent;
+}
+.vs-btn:active {
+    transform: scale(0.95);
+}
+
+.sky-plane {
+    position: absolute;
+    will-change: transform;
+    transition: transform 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+}
+
+@font-face {
+    font-family: 'Digit Tech 7'; /* Это имя мы задаем сами, оно связывает файл с кодом */
+    src: url('fonts/DigitTech7-Regular.otf') format('opentype'); /* Обратите внимание на format('opentype') для .otf */
+    font-weight: normal;
+    font-style: normal;
+}
+
+/* Класс, который мы вешаем на цифры */
+.digital-font {
+    font-family: 'Digit Tech 7', monospace; 
+}

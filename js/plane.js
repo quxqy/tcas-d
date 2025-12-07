@@ -1,0 +1,149 @@
+class Plane {
+
+  constructor(id, type, options = {}) {
+    this.id = id;
+    this.type = type;
+
+    this.x = options.x || 0;
+    this.y = options.y || 0;
+    this.alt = options.alt || 10000;
+    this.speed = options.speed || 50;
+    this.scale = options.scale || 1.0;
+
+    this.isControlled = options.isControlled || (type === 'own');
+    this.vertSpeedFtMin = 0;
+
+    // Флаг: была ли эта цель активирована как RA (Red)
+    // Она останется RA, пока конфликт не будет полностью исчерпан
+    this.isRaActive = false;
+
+    if (this.type === 'own') {
+      this.vectorX = (this.speed / 15);
+      this.vectorY = 0;
+      this.imgRight = CONFIG.IMAGES.OWN_RIGHT;
+      this.imgLeft = CONFIG.IMAGES.OWN_LEFT;
+    } else {
+      this.vectorX = (this.speed / 15);
+      this.vectorY = options.vectorY !== undefined ? options.vectorY : (Math.random() * 2 - 1);
+
+      if (this.isControlled) {
+        this.imgRight = CONFIG.IMAGES.CONTROL_RIGHT;
+        this.imgLeft = CONFIG.IMAGES.CONTROL_LEFT;
+      } else {
+        this.imgRight = CONFIG.IMAGES.ENEMY_RIGHT;
+        this.imgLeft = CONFIG.IMAGES.ENEMY_LEFT;
+      }
+    }
+
+    this.currentImgSrc = this.imgRight;
+    this.domElement = null;
+  }
+
+  update() {
+    this.x += this.vectorX;
+    this.y += this.vectorY;
+    this.alt += (this.vertSpeedFtMin / 360);
+
+    // Physics Limits
+    if (this.alt < 0) {
+      this.alt = 0;
+      if (this.vertSpeedFtMin < 0) this.vertSpeedFtMin = 0;
+    }
+
+    if (this.alt > 30000) {
+      this.alt = 30000;
+      if (this.vertSpeedFtMin > 0) this.vertSpeedFtMin = 0;
+    }
+
+    // Horizontal Bounds & Image Direction
+    if (this.x <= 0) {
+      this.x = 0;
+      this.vectorX = Math.abs(this.vectorX);
+    }
+
+    if (this.x >= CONFIG.WORLD_WIDTH) {
+      if (this.type !== 'own') {
+        this.x = CONFIG.WORLD_WIDTH;
+        this.vectorX = -Math.abs(this.vectorX);
+      }
+    }
+
+    // Image Direction
+    if (this.vectorX < 0 && this.currentImgSrc !== this.imgLeft) {
+      this.currentImgSrc = this.imgLeft;
+      if (this.domElement) this.domElement.src = this.imgLeft;
+    } else if (this.vectorX >= 0 && this.currentImgSrc !== this.imgRight) {
+      this.currentImgSrc = this.imgRight;
+      if (this.domElement) this.domElement.src = this.imgRight;
+    }
+  }
+
+  adjustVertSpeed(delta) {
+    this.vertSpeedFtMin += delta;
+    if (this.vertSpeedFtMin > 6000) this.vertSpeedFtMin = 6000;
+    if (this.vertSpeedFtMin < -6000) this.vertSpeedFtMin = -6000;
+  }
+
+    checkThreat(otherPlane) {
+    if (!otherPlane || this.id === otherPlane.id) return 0;
+
+    const dx = Math.abs(this.x - otherPlane.x);
+    const dy = Math.abs(this.y - otherPlane.y);
+    const dz = Math.abs(this.alt - otherPlane.alt);
+    const distSq = dx * dx + dy * dy;
+    const dist = Math.sqrt(distSq);
+
+    const RA_DIST = 8000;
+    const RA_ALT  = 1200;
+    const TA_DIST = 9000;
+    const TA_ALT  = 2000;
+    const PROX_DIST = 12000;
+    const PROX_ALT  = 2500;
+    
+    // Дистанция, после которой мы разрешаем снять красный статус, 
+    // если угроза по высоте миновала.
+    const SAFE_EXIT_DIST = 0; 
+
+    const isBigNear = (this.id === 4);
+
+    if (isBigNear) {
+      if (dist < PROX_DIST && dz < PROX_ALT) return 1;
+      return 0;
+    }
+
+    // 1. Рассчитываем "мгновенный" статус
+    let rawStatus = 0;
+    if (dist < RA_DIST && dz < RA_ALT) rawStatus = 3;
+    else if (dist < TA_DIST && dz < TA_ALT) rawStatus = 2;
+    else if (dist < PROX_DIST && dz < PROX_ALT) rawStatus = 1;
+
+    // 2. Логика "залипания" RA (Sticky RA)
+    if (this.isRaActive) {
+        // --- ИСПРАВЛЕНИЕ ---
+        // Если мы разошлись на расстояние > 4000, мы разрешаем системе снять блокировку.
+        // Если при этом rawStatus все еще 3 (например, мы летим крыло к крылу на одной высоте), 
+        // он вернет 3. Но если мы разошлись по высоте (rawStatus == 0 или 2), 
+        // то красный статус наконец-то пропадет.
+        if (dist > SAFE_EXIT_DIST) {
+            this.isRaActive = false;
+            return rawStatus;
+        }
+
+        // Если угроза пропала полностью (даже ближе 4000, например, резкий набор высоты > 2500ft)
+        if (rawStatus === 0) {
+            this.isRaActive = false;
+            return 0;
+        }
+        
+        // Иначе держим статус 3 (RA), даже если rawStatus упал до TA
+        return 3;
+    } else {
+        if (rawStatus === 3) {
+            this.isRaActive = true;
+        }
+        return rawStatus;
+    }
+  }
+  
+
+}
