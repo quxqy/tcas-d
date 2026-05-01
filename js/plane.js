@@ -84,7 +84,7 @@ class Plane {
     if (this.vertSpeedFtMin < -6000) this.vertSpeedFtMin = -6000;
   }
 
-    checkThreat(otherPlane) {
+  checkThreat(otherPlane) {
     if (!otherPlane || this.id === otherPlane.id) return 0;
 
     const dx = Math.abs(this.x - otherPlane.x);
@@ -99,10 +99,6 @@ class Plane {
     const TA_ALT  = 2000;
     const PROX_DIST = 12000;
     const PROX_ALT  = 2500;
-    
-    // Дистанция, после которой мы разрешаем снять красный статус, 
-    // если угроза по высоте миновала.
-    const SAFE_EXIT_DIST = 0; 
 
     const isBigNear = (this.id === 4);
 
@@ -119,31 +115,23 @@ class Plane {
 
     // 2. Логика "залипания" RA (Sticky RA)
     if (this.isRaActive) {
-        // --- ИСПРАВЛЕНИЕ ---
-        // Если мы разошлись на расстояние > 4000, мы разрешаем системе снять блокировку.
-        // Если при этом rawStatus все еще 3 (например, мы летим крыло к крылу на одной высоте), 
-        // он вернет 3. Но если мы разошлись по высоте (rawStatus == 0 или 2), 
-        // то красный статус наконец-то пропадет.
-        if (dist > SAFE_EXIT_DIST) {
-            this.isRaActive = false;
-            return rawStatus;
-        }
-
-        // Если угроза пропала полностью (даже ближе 4000, например, резкий набор высоты > 2500ft)
+        // Если RA был активен, он остается активным (3)
+        // до тех пор, пока rawStatus не упадет до 0 (полностью безопасно).
         if (rawStatus === 0) {
+            // Полностью разошлись по дистанции И по высоте
             this.isRaActive = false;
             return 0;
+        } else {
+            // Угроза все еще есть (1, 2, или 3). Мы форсируем 3 (RA).
+            return 3; 
         }
-        
-        // Иначе держим статус 3 (RA), даже если rawStatus упал до TA
-        return 3;
     } else {
+        // Если RA не активен, и мы достигли RA зоны
         if (rawStatus === 3) {
             this.isRaActive = true;
         }
+        // Возвращаем текущий статус (0, 1, 2, или 3)
         return rawStatus;
     }
   }
-  
-
 }

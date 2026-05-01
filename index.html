@@ -32,7 +32,8 @@
     </style>
   </head>
   <body class="noselect">
-    <main class="w-full h-screen flex flex-col bg-black">
+    <main id="app-root" class="w-full h-screen flex flex-col bg-black">
+
       
       <div id="sky-container" class="flex-1 w-full relative overflow-hidden bg-black z-0 border-b border-gray-800/50"></div>
 
@@ -163,5 +164,30 @@
     <script src="js/radar.js"></script>
     <script src="js/controls.js"></script>
     <script src="js/main.js"></script>
+
+
+
+    <script>
+    (function() {
+        const MIN_WIDTH = 1780;   // реальная минимальная ширина UI
+        const MIN_HEIGHT = 900;   // реальная минимальная высота UI
+
+        function applyScale() {
+            const w = window.innerWidth;
+            const h = window.innerHeight;
+
+            const scaleW = w / MIN_WIDTH;
+            const scaleH = h / MIN_HEIGHT;
+            const scale = Math.min(scaleW, scaleH, 1);
+
+            document.getElementById("app-root").style.transform = `scale(${scale})`;
+        }
+
+        window.addEventListener("resize", applyScale);
+        window.addEventListener("load", applyScale);
+    })();
+    </script>
+
+
   </body>
 </html>

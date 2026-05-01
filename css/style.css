@@ -3,7 +3,46 @@ body {
     overflow: hidden;
     margin: 0;
     user-select: none;
+    /* Фиксируем размеры под 1366x768 */
+    min-width: 1366px;
+    min-height: 768px;
 }
+
+/* === ОПТИМИЗАЦИЯ ДЛЯ 1366×768 === */
+@media (max-width: 1366px) and (max-height: 768px) {
+    html, body {
+        width: 100vw;
+        height: 100vh;
+        overflow: hidden;
+    }
+    
+    #app-root {
+        transform: scale(0.8);
+        transform-origin: top left;
+        width: 125%; /* 100/0.8 = 1.25 */
+        height: 125%;
+    }
+    
+    /* Оптимизация кнопок для меньшего экрана */
+    .vs-btn {
+        width: 85px !important; /* Уменьшаем с 100px */
+        margin: 0 20px !important; /* Уменьшаем отступы */
+    }
+    
+    /* Уменьшаем все шрифты пропорционально */
+    .digital-font {
+        font-size: 0.9em !important;
+    }
+    
+    /* Уменьшаем интервалы между элементами */
+    .instrument-btn {
+        margin: 2px !important;
+        padding: 5px !important;
+    }
+}
+
+/* === БАЗОВЫЙ РАЗМЕР ДЛЯ 1920×1080 (как сейчас) === */
+/* Оставляем как есть для больших экранов */
 
 .instrument-btn {
     cursor: pointer;
@@ -14,11 +53,11 @@ body {
     transform: scale(0.95);
 }
 
-/* === VS BUTTONS ADJUSTED === */
+/* === VS BUTTONS === */
 .vs-btn {
-    width: 100px; /* Smaller size (was 120) */
+    width: 100px;
     height: auto;
-    margin: 0 30px; /* Bigger spacing (was 20) */
+    margin: 0 30px;
     cursor: pointer;
     transition: transform 0.1s ease;
     -webkit-tap-highlight-color: transparent;
@@ -34,13 +73,12 @@ body {
 }
 
 @font-face {
-    font-family: 'Digit Tech 7'; /* Это имя мы задаем сами, оно связывает файл с кодом */
-    src: url('fonts/DigitTech7-Regular.otf') format('opentype'); /* Обратите внимание на format('opentype') для .otf */
+    font-family: 'Digit Tech 7';
+    src: url('fonts/DigitTech7-Regular.otf') format('opentype');
     font-weight: normal;
     font-style: normal;
 }
 
-/* Класс, который мы вешаем на цифры */
 .digital-font {
-    font-family: 'Digit Tech 7', monospace; 
+    font-family: 'Digit Tech 7', monospace;
 }

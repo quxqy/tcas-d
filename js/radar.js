@@ -18,8 +18,14 @@ const Radar = {
     lastVsOkTime: null,
     lastIncreaseTime: 0,
     increaseCount: 0,
-    lastClearTime: 0 // НОВОЕ: Время, когда последний раз звучал Clear
+    lastClearTime: 0,
+    enemyAltDiff: 0
   },
+
+  // сохраняем RA для следующего кадра (чтобы RA звук давался ПОСЛЕ смены цвета)
+  nextThreatLevel: 0,
+  nextAdvisory: null,
+  nextVs: 0,
 
   OWN_PLANE_Y_RATIO: 0.60,
   extraWidth: 40,
@@ -151,26 +157,28 @@ const Radar = {
     let raAdvisory = null;
 
     enemies.forEach(enemy => {
-      const forward_dist = (enemy.x - ownPlane.x);
-      const lateral_dist = (enemy.y - ownPlane.y);
 
-      const screenY = cy - forward_dist * scale;
-      const screenX = cx - lateral_dist * scale;
+      // --- Игнорируем цели позади (фикс 2) ---
+      const forward_distance = enemy.x - ownPlane.x;
+      if (forward_distance < -200) return;
+
+      const forward = (enemy.x - ownPlane.x);
+      const lateral = (enemy.y - ownPlane.y);
+
+      const screenY = cy - forward * scale;
+      const screenX = cx - lateral * scale;
 
       const distFromCenter = Math.sqrt(
-        Math.pow(screenX - cx, 2) + Math.pow(screenY - cy, 2)
+        (screenX - cx) ** 2 + (screenY - cy) ** 2
       );
       if (distFromCenter > maxVisualDistancePx) return;
 
-      // 1. Стандартный расчет (вертикаль и физика сохраняются)
       let status = enemy.checkThreat(ownPlane);
 
-      // 2. ГОРИЗОНТАЛЬНЫЙ СРЕЗ (Horizontal Cutoff)
-      // Если враг летел навстречу (vectorX < 0) и его координата X стала меньше нашей (мы его перегнали),
-      // то мгновенно убираем угрозу. 
-      if (enemy.vectorX < 0 && enemy.x < ownPlane.x) {
-         status = 0;
-         enemy.isRaActive = false; // Снимаем "залипание"
+      // --- фикс 1: буфер на пролёт ---
+      if (enemy.vectorX < 0 && enemy.x < ownPlane.x - 300) {
+        status = 0;
+        enemy.isRaActive = false;
       }
 
       if (forceStatus !== null) {
@@ -181,15 +189,16 @@ const Radar = {
 
       if (status > currentMaxThreatLevel) currentMaxThreatLevel = status;
 
-      // Логика определения типа команды (Advisory)
+      // RA advisory
       if (status === 3 && this.systemStatus === 'TA/RA') {
         const altDiff = enemy.alt - ownPlane.alt;
-        
-        if (Math.abs(altDiff) > 750) {
-            raAdvisory = 'maintain';
+        this.threatState.enemyAltDiff = altDiff;
+
+        // расширенная зона maintain
+        if (Math.abs(altDiff) > 1400) {
+          raAdvisory = "maintain";
         } else {
-            if (altDiff > 0) raAdvisory = 'descend'; 
-            else raAdvisory = 'climb';               
+          raAdvisory = altDiff > 0 ? "descend" : "climb";
         }
       }
 
@@ -209,16 +218,21 @@ const Radar = {
 
     this.drawVSScale(ownPlane.vertSpeedFtMin, raAdvisory);
 
+    // --- фикс 3: откладываем RA на следующий кадр ---
+    this.nextThreatLevel = currentMaxThreatLevel;
+    this.nextAdvisory = raAdvisory;
+    this.nextVs = ownPlane.vertSpeedFtMin;
+
     if (showThreats) {
       this.handleAlerts(
         width,
         height,
         cx,
         cy,
-        currentMaxThreatLevel,
-        raAdvisory,
+        this.nextThreatLevel,
+        this.nextAdvisory,
         audioController,
-        ownPlane.vertSpeedFtMin
+        this.nextVs
       );
     }
   },
@@ -259,7 +273,6 @@ const Radar = {
     const newHasRA = (maxThreat === 3);
     const now = Date.now();
 
-    // --- ОТРИСОВКА ТЕКСТА ---
     const textX = cx + 45;
     if (newHasRA && advisory) {
       if (advisory !== 'maintain') {
@@ -274,10 +287,6 @@ const Radar = {
       this.ctx.fillText("TRAFFIC", textX, cy - 20);
     }
 
-    // --- ЛОГИКА АУДИО ---
-
-    // 1. CLEAR OF CONFLICT
-    // Срабатывает, когда мы перегнали цель (RA исчез).
     if (this.threatState.hasRA && !newHasRA) {
         audio.play('clear');
         this.threatState.raPhase = 'none';
@@ -287,32 +296,18 @@ const Radar = {
         this.threatState.increaseCount = 0;
         
         this.threatState.hasRA = false;
-        
-        // ВАЖНО: Сбрасываем флаг Traffic в false, чтобы система снова могла проверить условия для Traffic.
-        // Но сам звук Traffic будет заблокирован таймером ниже.
-        this.threatState.hasTraffic = false; 
-
-        // Запоминаем время, когда закончился конфликт
+        this.threatState.hasTraffic = false;
         this.threatState.lastClearTime = now;
     }
 
-    // 2. TRAFFIC ALERT (с задержкой)
-    // Мы хотим сказать Traffic, если есть угроза, нет RA, и мы еще не сказали Traffic.
     if (newHasTraffic && !this.threatState.hasTraffic && !newHasRA) {
-        // Проверяем, сколько прошло времени с момента Clear
         const timeSinceClear = now - this.threatState.lastClearTime;
-        
-        // Если прошло больше 2500 мс (2.5 сек), разрешаем воспроизведение
         if (timeSinceClear > 2500) {
             audio.play('traffic');
-            // Ставим флаг только ПОСЛЕ воспроизведения
             this.threatState.hasTraffic = true;
         }
-        // Если время еще не прошло — мы просто ничего не делаем в этом кадре.
-        // В следующем кадре условие newHasTraffic всё еще будет true, и мы снова проверим таймер.
     }
 
-    // 3. НОВЫЙ RA или ИЗМЕНЕНИЕ ADVISORY
     const isNewRA = newHasRA && !this.threatState.hasRA;
     const isAdvisoryChange = newHasRA && this.threatState.hasRA && (advisory !== this.threatState.advisory);
 
@@ -326,7 +321,6 @@ const Radar = {
       this.threatState.lastVsOkTime = null;
     }
 
-    // 4. ПРОВЕРКА ВЕРТИКАЛЬНОЙ СКОРОСТИ (INCREASE)
     if (newHasRA && advisory && advisory !== 'maintain') {
       const greenMin = 1500;
       const greenOk = (advisory === 'climb')
@@ -363,11 +357,8 @@ const Radar = {
       }
     }
 
-    // Сохранение состояния
-    // Обратите внимание: hasTraffic сохраняем внутри блока 2, чтобы учесть задержку
     this.threatState.hasRA = newHasRA;
     this.threatState.advisory = advisory;
-    // hasTraffic обновляется индивидуально внутри логики с таймером
     if (!newHasTraffic) {
        this.threatState.hasTraffic = false;
     }
@@ -468,17 +459,41 @@ const Radar = {
       const redColor = "#FF0000";
 
       if (advisory === 'maintain') {
-          const yPlus1000 = speedToY(1000);
-          const yMinus1000 = speedToY(-1000);
-          const yTop = speedToY(6000);
-          const yBottom = speedToY(-6000);
+        
+        const enemyAbove = this.threatState.enemyAltDiff > 0;
 
+        const yTop = speedToY(6000);
+        const yBottom = speedToY(-6000);
+
+        // зона "чуть-чуть"
+        const ySmallUp1 = speedToY(100);
+        const ySmallUp2 = speedToY(-300);
+        const ySmallDown1 = speedToY(-100);
+        const ySmallDown2 = speedToY(300);
+
+        if (enemyAbove) {
+          // Мы ниже — enemy выше
+          // Вверх — нельзя (красное)
           ctx.fillStyle = redColor;
-          ctx.fillRect(x, yTop, w, yPlus1000 - yTop);
-          ctx.fillRect(x, yMinus1000, w, yBottom - yMinus1000);
+          ctx.fillRect(x, yTop, w, ySmallUp1 - yTop);
 
+          // Маленькая зелёная зона вверх
           ctx.fillStyle = greenColor;
-          ctx.fillRect(x, yPlus1000, w, yMinus1000 - yPlus1000);
+          ctx.fillRect(x, ySmallUp1, w, ySmallUp2 - ySmallUp1);
+
+          // Остальное вниз — нейтрально
+        } else {
+          // Мы выше — enemy ниже
+          // Вниз — нельзя
+          ctx.fillStyle = redColor;
+          ctx.fillRect(x, ySmallDown1, w, yBottom - ySmallDown1);
+
+          // Маленькая зелёная зона вниз
+          ctx.fillStyle = greenColor;
+          ctx.fillRect(x, ySmallDown2, w, ySmallDown1 - ySmallDown2);
+
+          // Остальное вверх — нейтрально
+        }
 
       } else if (advisory === 'climb') {
         const y1500 = speedToY(1500);
@@ -487,8 +502,10 @@ const Radar = {
 
         ctx.fillStyle = redColor;
         ctx.fillRect(x, y1500, w, yBottom - y1500);
+
         ctx.fillStyle = greenColor;
         ctx.fillRect(x, yTop, w, y1500 - yTop);
+
       } else if (advisory === 'descend') {
         const yNeg1500 = speedToY(-1500);
         const yTop = speedToY(6000);
@@ -496,6 +513,7 @@ const Radar = {
 
         ctx.fillStyle = redColor;
         ctx.fillRect(x, yTop, w, yNeg1500 - yTop);
+
         ctx.fillStyle = greenColor;
         ctx.fillRect(x, yNeg1500, w, yBottom - yNeg1500);
       }
